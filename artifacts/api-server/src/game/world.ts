@@ -1,14 +1,17 @@
-export const WORLD_WIDTH = 3600;
-export const WORLD_HEIGHT = 3600;
-export const TREE_COUNT = 70;
+export const WORLD_WIDTH = 5600;
+export const WORLD_HEIGHT = 5600;
+export const TREE_COUNT = 90;
 export const TREE_HP = 5;
 export const TREE_RADIUS = 30;
 export const TREE_RESPAWN_MS = 8000;
 export const PLAYER_BASE_RADIUS = 20;
+export const PLAYER_MAX_HP = 5;
 export const PLAYER_SPEED = 230; // px/sec
-export const CHOP_RANGE = 62;
+export const CHOP_RANGE = 62;   // player-to-tree reach
+export const ATTACK_RANGE = 75; // player-to-player reach
 export const CHOP_COOLDOWN_MS = 450;
 export const TICK_MS = 50;
+export const HP_REGEN_INTERVAL_MS = 4000; // +1 HP every 4 s when out of combat
 
 /** Sword tier definitions. Index = swordLevel (0 = no sword). */
 export const SWORD_TIERS = [

@@ -6,6 +6,8 @@ export interface PlayerState {
   angle: number;
   radius: number;
   coins: number;
+  hp: number;
+  maxHp: number;
   swordLevel: number; // 0 = no sword, 1–4 = tiers
   lastChopAt: number;
 }
@@ -29,6 +31,16 @@ export interface ChopEvent {
   chopperId: string;
 }
 
+export interface KillEvent {
+  killerId: string;
+  killerName: string;
+  victimId: string;
+  victimName: string;
+  coinsGained: number;
+  x: number;
+  y: number;
+}
+
 export type ClientMessage =
   | { type: "join"; name: string }
   | { type: "input"; dx: number; dy: number }
@@ -43,6 +55,7 @@ export type ServerMessage =
       players: PlayerState[];
       trees: TreeState[];
       chops: ChopEvent[];
+      kills: KillEvent[];
       you: PlayerState;
     }
   | { type: "error"; message: string };
