@@ -2,6 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameSocket } from './network';
 import type { PlayerState, ServerMessage, TreeState } from './types';
 
+const SWORD_TIERS = [
+  { level: 0, name: 'None',         damage: 0, cost: 0   },
+  { level: 1, name: 'Wooden Sword', damage: 1, cost: 1   },
+  { level: 2, name: 'Iron Sword',   damage: 2, cost: 10  },
+  { level: 3, name: 'Steel Sword',  damage: 3, cost: 50  },
+  { level: 4, name: 'Golden Sword', damage: 5, cost: 100 },
+] as const;
+
+/** Blade fill colour per sword tier (used in canvas drawPlayer). */
+const SWORD_COLORS = ['', '#c8a96e', '#c0cdd8', '#6fa8dc', '#ffd700'];
+
 interface FloatingText {
   id: number;
   x: number;
@@ -39,9 +50,10 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
 
   const [connected, setConnected] = useState(false);
   const [coins, setCoins] = useState(1);
-  const [hasSword, setHasSword] = useState(false);
+  const [swordLevel, setSwordLevel] = useState(0);
   const [leaderboard, setLeaderboard] = useState<PlayerState[]>([]);
   const [nearTree, setNearTree] = useState(false);
+  const [showUpgrades, setShowUpgrades] = useState(false);
   const [isTouchDevice] = useState(
     () =>
       typeof window !== 'undefined' &&
@@ -56,6 +68,10 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
 
   const buySword = useCallback(() => {
     socketRef.current?.send({ type: 'buySword' });
+  }, []);
+
+  const upgradeSword = useCallback(() => {
+    socketRef.current?.send({ type: 'upgradeSword' });
   }, []);
 
   useEffect(() => {
@@ -78,7 +94,7 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
         treesRef.current = message.trees;
         youRef.current = message.you;
         setCoins(message.you.coins);
-        setHasSword(message.you.hasSword);
+        setSwordLevel(message.you.swordLevel);
 
         const top = [...message.players]
           .sort((a, b) => b.coins - a.coins)
@@ -375,15 +391,18 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
         ctx!.fill();
       }
 
-      if (player.hasSword) {
+      if (player.swordLevel > 0) {
         ctx!.save();
         ctx!.rotate(player.angle + Math.PI / 4);
         const flashActive = isYou && Date.now() - swordFlashRef.current < 150;
-        ctx!.translate(player.radius * (flashActive ? 1.15 : 0.85), 0);
-        ctx!.fillStyle = '#d8dee6';
-        ctx!.fillRect(-3, -player.radius * 0.9, 6, player.radius * 1.1);
-        ctx!.fillStyle = '#8a5a2b';
-        ctx!.fillRect(-5, player.radius * 0.1, 10, 8);
+        ctx!.translate(player.radius * (flashActive ? 1.2 : 0.85), 0);
+        // blade length grows slightly with tier
+        const bladeH = player.radius * (0.9 + player.swordLevel * 0.15);
+        ctx!.fillStyle = SWORD_COLORS[player.swordLevel] ?? '#d8dee6';
+        ctx!.fillRect(-3, -bladeH, 6, bladeH);
+        // guard
+        ctx!.fillStyle = player.swordLevel === 4 ? '#d4a017' : '#8a5a2b';
+        ctx!.fillRect(-6, player.radius * 0.05, 12, 7);
         ctx!.restore();
       }
 
@@ -545,66 +564,142 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
         </div>
       )}
 
-      <div className="pointer-events-none absolute top-0 left-0 right-0 p-4 flex justify-between items-start">
-        <div className="pointer-events-auto flex items-center gap-3 bg-black/40 backdrop-blur-sm rounded-full px-4 py-2 border border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-yellow-400 shadow-inner" />
-            <span className="text-white font-bold text-lg tabular-nums">
-              {coins}
-            </span>
+      {/* ── Top bar ── */}
+      <div className="pointer-events-none absolute top-0 left-0 right-0 p-3 flex justify-between items-start gap-2">
+
+        {/* Left: coins + sword status + upgrades button */}
+        <div className="pointer-events-auto flex flex-col gap-2">
+          {/* Coin row */}
+          <div className="flex items-center gap-2 bg-black/45 backdrop-blur-sm rounded-full px-4 py-2 border border-white/10">
+            <div className="w-4 h-4 rounded-full bg-yellow-400 shadow-inner flex-shrink-0" />
+            <span className="text-white font-bold text-base tabular-nums">{coins}</span>
+            <span className="text-white/40 text-xs">coins</span>
           </div>
-          {!hasSword ? (
+
+          {/* Sword / buy row */}
+          {swordLevel === 0 ? (
             <button
               onClick={buySword}
               disabled={coins < 1}
-              className="ml-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:bg-gray-500 disabled:cursor-not-allowed text-black transition-colors"
+              className="px-4 py-2 rounded-full text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:bg-gray-600 disabled:cursor-not-allowed text-black transition-colors shadow"
             >
-              Buy Sword — 1 coin
+              🗡 Buy Sword — 1 coin
             </button>
           ) : (
-            <span className="ml-2 px-3 py-1.5 rounded-full text-sm font-semibold bg-emerald-600/80 text-white">
-              Sword equipped
-            </span>
+            <button
+              onClick={() => setShowUpgrades((v) => !v)}
+              className="px-4 py-2 rounded-full text-sm font-semibold bg-black/45 hover:bg-black/60 border border-white/10 text-white transition-colors shadow flex items-center gap-2"
+            >
+              <span>{['','🪵','🔩','⚔️','✨'][swordLevel]}</span>
+              <span>{SWORD_TIERS[swordLevel]?.name}</span>
+              <span className="text-white/40 text-xs ml-1">
+                {swordLevel < 4 ? '▲ Upgrade' : '★ MAX'}
+              </span>
+            </button>
           )}
         </div>
 
-        <div className="pointer-events-auto bg-black/40 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/10 min-w-[160px]">
-          <div className="text-white/60 text-xs font-semibold uppercase tracking-wide mb-1.5">
+        {/* Right: leaderboard */}
+        <div className="pointer-events-auto bg-black/45 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/10 min-w-[150px]">
+          <div className="text-white/50 text-xs font-semibold uppercase tracking-wide mb-1.5">
             Top Blobs
           </div>
           <div className="flex flex-col gap-1">
             {leaderboard.map((p, i) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between text-sm text-white/90"
-              >
-                <span className="truncate max-w-[100px]">
-                  {i + 1}. {p.name}
-                </span>
-                <span className="text-yellow-300 font-semibold tabular-nums">
-                  {p.coins}
-                </span>
+              <div key={p.id} className="flex items-center justify-between text-sm text-white/90">
+                <span className="truncate max-w-[100px]">{i + 1}. {p.name}</span>
+                <span className="text-yellow-300 font-semibold tabular-nums">{p.coins}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {!connected && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-          <span className="text-white text-lg animate-pulse">
-            Connecting...
-          </span>
+      {/* ── Upgrade panel ── */}
+      {showUpgrades && swordLevel > 0 && (
+        <div className="pointer-events-auto absolute top-28 left-3 w-72 bg-black/80 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-white font-bold text-sm uppercase tracking-wide">Sword Upgrades</span>
+            <button
+              onClick={() => setShowUpgrades(false)}
+              className="text-white/40 hover:text-white text-lg leading-none"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {SWORD_TIERS.slice(1).map((tier) => {
+              const owned = swordLevel >= tier.level;
+              const isCurrent = swordLevel === tier.level;
+              const isNext = tier.level === swordLevel + 1;
+              const canAfford = coins >= tier.cost;
+
+              return (
+                <div
+                  key={tier.level}
+                  className={[
+                    'rounded-xl p-3 border transition-colors',
+                    isCurrent
+                      ? 'bg-emerald-800/50 border-emerald-500/60'
+                      : owned
+                      ? 'bg-white/5 border-white/10 opacity-60'
+                      : isNext
+                      ? 'bg-white/8 border-amber-500/40'
+                      : 'bg-white/5 border-white/5 opacity-40',
+                  ].join(' ')}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{['','🪵','🔩','⚔️','✨'][tier.level]}</span>
+                      <div>
+                        <div className="text-white text-sm font-semibold">{tier.name}</div>
+                        <div className="text-white/50 text-xs">
+                          {tier.damage} dmg / chop
+                          {tier.level === 4 && ' — one-shots trees'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {owned ? (
+                      <span className="text-emerald-400 text-xs font-bold">
+                        {isCurrent ? '✓ Equipped' : '✓ Owned'}
+                      </span>
+                    ) : isNext ? (
+                      <button
+                        onClick={() => {
+                          upgradeSword();
+                          setShowUpgrades(false);
+                        }}
+                        disabled={!canAfford}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 disabled:bg-gray-600 disabled:cursor-not-allowed text-black transition-colors"
+                      >
+                        {canAfford ? `${tier.cost} 🪙` : `Need ${tier.cost} 🪙`}
+                      </button>
+                    ) : (
+                      <span className="text-white/30 text-xs">{tier.cost} 🪙</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {connected && hasSword && nearTree && (
+      {!connected && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <span className="text-white text-lg animate-pulse">Connecting…</span>
+        </div>
+      )}
+
+      {connected && swordLevel > 0 && nearTree && (
         <div className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-4 py-2 rounded-full border border-white/10">
           Click or press <span className="font-bold">Space</span> to chop
         </div>
       )}
 
-      {connected && !hasSword && nearTree && (
+      {connected && swordLevel === 0 && nearTree && (
         <div className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-4 py-2 rounded-full border border-white/10">
           Buy a sword to chop this tree
         </div>

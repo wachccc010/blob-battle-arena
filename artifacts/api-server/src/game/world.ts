@@ -1,15 +1,27 @@
 export const WORLD_WIDTH = 3600;
 export const WORLD_HEIGHT = 3600;
 export const TREE_COUNT = 70;
-export const TREE_HP = 3;
+export const TREE_HP = 5;
 export const TREE_RADIUS = 30;
 export const TREE_RESPAWN_MS = 8000;
 export const PLAYER_BASE_RADIUS = 20;
 export const PLAYER_SPEED = 230; // px/sec
 export const CHOP_RANGE = 62;
 export const CHOP_COOLDOWN_MS = 450;
-export const SWORD_COST = 1;
 export const TICK_MS = 50;
+
+/** Sword tier definitions. Index = swordLevel (0 = no sword). */
+export const SWORD_TIERS = [
+  { level: 0, name: "None",         damage: 0, cost: 0   },
+  { level: 1, name: "Wooden Sword", damage: 1, cost: 1   }, // buy
+  { level: 2, name: "Iron Sword",   damage: 2, cost: 10  }, // upgrade
+  { level: 3, name: "Steel Sword",  damage: 3, cost: 50  }, // upgrade
+  { level: 4, name: "Golden Sword", damage: 5, cost: 100 }, // upgrade
+] as const;
+
+export function swordDamage(swordLevel: number): number {
+  return SWORD_TIERS[swordLevel]?.damage ?? 0;
+}
 
 export function randomWorldPos(): { x: number; y: number } {
   return {

@@ -13,7 +13,7 @@ import {
   CHOP_COOLDOWN_MS,
   CHOP_RANGE,
   PLAYER_SPEED,
-  SWORD_COST,
+  SWORD_TIERS,
   TICK_MS,
   TREE_COUNT,
   TREE_HP,
@@ -25,6 +25,7 @@ import {
   distance,
   playerRadiusForCoins,
   randomWorldPos,
+  swordDamage,
 } from "./world";
 
 interface Connection {
@@ -105,7 +106,7 @@ export class GameServer {
         angle: 0,
         radius: playerRadiusForCoins(1),
         coins: 1,
-        hasSword: false,
+        swordLevel: 0,
         lastChopAt: 0,
       };
       this.players.set(id, player);
@@ -132,13 +133,30 @@ export class GameServer {
     }
 
     if (msg.type === "buySword") {
-      if (player.hasSword) return;
-      if (player.coins < SWORD_COST) {
+      if (player.swordLevel >= 1) return;
+      const cost = SWORD_TIERS[1].cost;
+      if (player.coins < cost) {
         this.send(socket, { type: "error", message: "Not enough coins" });
         return;
       }
-      player.coins -= SWORD_COST;
-      player.hasSword = true;
+      player.coins -= cost;
+      player.swordLevel = 1;
+      return;
+    }
+
+    if (msg.type === "upgradeSword") {
+      const nextLevel = player.swordLevel + 1;
+      if (nextLevel >= SWORD_TIERS.length) {
+        this.send(socket, { type: "error", message: "Already max level" });
+        return;
+      }
+      const cost = SWORD_TIERS[nextLevel].cost;
+      if (player.coins < cost) {
+        this.send(socket, { type: "error", message: "Not enough coins" });
+        return;
+      }
+      player.coins -= cost;
+      player.swordLevel = nextLevel;
       return;
     }
 
@@ -149,7 +167,7 @@ export class GameServer {
   }
 
   private tryChop(player: PlayerState): void {
-    if (!player.hasSword) return;
+    if (player.swordLevel === 0) return;
     const now = Date.now();
     if (now - player.lastChopAt < CHOP_COOLDOWN_MS) return;
 
@@ -166,7 +184,8 @@ export class GameServer {
     if (!target) return;
 
     player.lastChopAt = now;
-    target.hp -= 1;
+    const dmg = swordDamage(player.swordLevel);
+    target.hp -= dmg;
 
     if (target.hp <= 0) {
       target.alive = false;

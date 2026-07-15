@@ -6,7 +6,7 @@ export interface PlayerState {
   angle: number;
   radius: number;
   coins: number;
-  hasSword: boolean;
+  swordLevel: number; // 0 = no sword, 1–4 = tiers
   lastChopAt: number;
 }
 
@@ -33,6 +33,7 @@ export type ClientMessage =
   | { type: "join"; name: string }
   | { type: "input"; dx: number; dy: number }
   | { type: "buySword" }
+  | { type: "upgradeSword" }
   | { type: "chop" };
 
 export type ServerMessage =
