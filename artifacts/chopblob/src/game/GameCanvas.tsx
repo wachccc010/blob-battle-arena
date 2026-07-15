@@ -31,12 +31,23 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
   const floatingRef = useRef<FloatingText[]>([]);
   const mouseRef = useRef({ x: 0, y: 0 });
   const swordFlashRef = useRef(0);
+  const keysRef = useRef({ up: false, down: false, left: false, right: false });
+  const joystickRef = useRef({ active: false, dx: 0, dy: 0 });
+  const joystickTouchId = useRef<number | null>(null);
+  const joystickBaseRef = useRef<HTMLDivElement>(null);
+  const joystickKnobRef = useRef<HTMLDivElement>(null);
 
   const [connected, setConnected] = useState(false);
   const [coins, setCoins] = useState(1);
   const [hasSword, setHasSword] = useState(false);
   const [leaderboard, setLeaderboard] = useState<PlayerState[]>([]);
   const [nearTree, setNearTree] = useState(false);
+  const [isTouchDevice] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      (window.matchMedia?.('(pointer: coarse)').matches ||
+        navigator.maxTouchPoints > 0),
+  );
 
   const chop = useCallback(() => {
     socketRef.current?.send({ type: 'chop' });
@@ -135,14 +146,150 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
       if (e.code === 'Space') {
         e.preventDefault();
         chop();
+        return;
       }
+      switch (e.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+          keysRef.current.up = true;
+          break;
+        case 'KeyS':
+        case 'ArrowDown':
+          keysRef.current.down = true;
+          break;
+        case 'KeyA':
+        case 'ArrowLeft':
+          keysRef.current.left = true;
+          break;
+        case 'KeyD':
+        case 'ArrowRight':
+          keysRef.current.right = true;
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
     }
     window.addEventListener('keydown', handleKeyDown);
+
+    function handleKeyUp(e: KeyboardEvent) {
+      switch (e.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+          keysRef.current.up = false;
+          break;
+        case 'KeyS':
+        case 'ArrowDown':
+          keysRef.current.down = false;
+          break;
+        case 'KeyA':
+        case 'ArrowLeft':
+          keysRef.current.left = false;
+          break;
+        case 'KeyD':
+        case 'ArrowRight':
+          keysRef.current.right = false;
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    }
+    window.addEventListener('keyup', handleKeyUp);
 
     function handleClick() {
       chop();
     }
     canvas!.addEventListener('mousedown', handleClick);
+
+    function updateJoystickFromTouch(clientX: number, clientY: number) {
+      const base = joystickBaseRef.current;
+      const knob = joystickKnobRef.current;
+      if (!base || !knob) return;
+      const rect = base.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const dx = clientX - centerX;
+      const dy = clientY - centerY;
+      const maxRadius = rect.width / 2;
+      const len = Math.hypot(dx, dy);
+      const clamped = Math.min(len, maxRadius);
+      const nx = len > 0 ? dx / len : 0;
+      const ny = len > 0 ? dy / len : 0;
+      knob.style.transform = `translate(${nx * clamped}px, ${ny * clamped}px)`;
+      const deadZone = 8;
+      if (len > deadZone) {
+        joystickRef.current.dx = nx;
+        joystickRef.current.dy = ny;
+      } else {
+        joystickRef.current.dx = 0;
+        joystickRef.current.dy = 0;
+      }
+    }
+
+    function resetJoystick() {
+      joystickRef.current = { active: false, dx: 0, dy: 0 };
+      joystickTouchId.current = null;
+      const knob = joystickKnobRef.current;
+      if (knob) knob.style.transform = 'translate(0px, 0px)';
+    }
+
+    function handleTouchStart(e: TouchEvent) {
+      const base = joystickBaseRef.current;
+      if (!base) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const rect = base.getBoundingClientRect();
+      const withinZone =
+        touch.clientX >= rect.left - 40 &&
+        touch.clientX <= rect.right + 40 &&
+        touch.clientY >= rect.top - 40 &&
+        touch.clientY <= rect.bottom + 40;
+      if (!withinZone || joystickTouchId.current !== null) return;
+      joystickTouchId.current = touch.identifier;
+      joystickRef.current.active = true;
+      updateJoystickFromTouch(touch.clientX, touch.clientY);
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      if (joystickTouchId.current === null) return;
+      for (const touch of Array.from(e.changedTouches)) {
+        if (touch.identifier === joystickTouchId.current) {
+          e.preventDefault();
+          updateJoystickFromTouch(touch.clientX, touch.clientY);
+        }
+      }
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+      if (joystickTouchId.current === null) return;
+      for (const touch of Array.from(e.changedTouches)) {
+        if (touch.identifier === joystickTouchId.current) {
+          resetJoystick();
+        }
+      }
+    }
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    function handleChopTap(e: TouchEvent) {
+      // A tap outside the joystick zone triggers a chop attempt (mobile has no spacebar).
+      const base = joystickBaseRef.current;
+      const touch = e.changedTouches[0];
+      if (!base || !touch) return;
+      const rect = base.getBoundingClientRect();
+      const withinZone =
+        touch.clientX >= rect.left - 40 &&
+        touch.clientX <= rect.right + 40 &&
+        touch.clientY >= rect.top - 40 &&
+        touch.clientY <= rect.bottom + 40;
+      if (withinZone) return;
+      chop();
+    }
+    canvas!.addEventListener('touchstart', handleChopTap, { passive: true });
 
     function drawTree(tree: TreeState, alpha: number) {
       ctx!.save();
@@ -324,25 +471,42 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
       ctx!.restore();
     }
 
+    function computeInputVector(): { dx: number; dy: number } {
+      // Priority: joystick (mobile) > keyboard (WASD/arrows) > mouse-follow (desktop).
+      if (joystickRef.current.active) {
+        return { dx: joystickRef.current.dx, dy: joystickRef.current.dy };
+      }
+
+      const keys = keysRef.current;
+      let kx = 0;
+      let ky = 0;
+      if (keys.left) kx -= 1;
+      if (keys.right) kx += 1;
+      if (keys.up) ky -= 1;
+      if (keys.down) ky += 1;
+      if (kx !== 0 || ky !== 0) {
+        const len = Math.hypot(kx, ky);
+        return { dx: kx / len, dy: ky / len };
+      }
+
+      const dx = mouseRef.current.x - canvas!.width / 2;
+      const dy = mouseRef.current.y - canvas!.height / 2;
+      const len = Math.hypot(dx, dy);
+      const deadZone = 6;
+      if (len > deadZone) {
+        return { dx: dx / len, dy: dy / len };
+      }
+      return { dx: 0, dy: 0 };
+    }
+
     function loop() {
       const you = youRef.current;
       if (you) {
-        const dx = mouseRef.current.x - canvas!.width / 2;
-        const dy = mouseRef.current.y - canvas!.height / 2;
-        const len = Math.hypot(dx, dy);
-        const deadZone = 6;
         const now = performance.now();
         if (now - lastInputSent > 50) {
           lastInputSent = now;
-          if (len > deadZone) {
-            socketRef.current?.send({
-              type: 'input',
-              dx: dx / len,
-              dy: dy / len,
-            });
-          } else {
-            socketRef.current?.send({ type: 'input', dx: 0, dy: 0 });
-          }
+          const { dx, dy } = computeInputVector();
+          socketRef.current?.send({ type: 'input', dx, dy });
         }
       }
       render();
@@ -355,13 +519,31 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
       window.removeEventListener('resize', resize);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
       canvas!.removeEventListener('mousedown', handleClick);
+      canvas!.removeEventListener('touchstart', handleChopTap);
     };
   }, [chop]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#173820] select-none">
       <canvas ref={canvasRef} className="block cursor-crosshair" />
+
+      {isTouchDevice && (
+        <div
+          ref={joystickBaseRef}
+          className="absolute bottom-8 left-8 w-28 h-28 rounded-full bg-white/10 border-2 border-white/25 backdrop-blur-sm touch-none"
+        >
+          <div
+            ref={joystickKnobRef}
+            className="absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full bg-white/70 border border-white/40 transition-transform duration-75 ease-out"
+          />
+        </div>
+      )}
 
       <div className="pointer-events-none absolute top-0 left-0 right-0 p-4 flex justify-between items-start">
         <div className="pointer-events-auto flex items-center gap-3 bg-black/40 backdrop-blur-sm rounded-full px-4 py-2 border border-white/10">
