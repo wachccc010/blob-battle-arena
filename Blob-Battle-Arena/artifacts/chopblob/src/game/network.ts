@@ -2,7 +2,10 @@ import type { ClientMessage, ServerMessage } from './types';
 
 export function buildWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://${window.location.host}/api/ws`;
+  export function buildWsUrl(): string {
+      return 'wss://chobblob-server.onrender.com/api/ws';
+      }
+  }
 }
 
 export type MessageHandler = (message: ServerMessage) => void;
