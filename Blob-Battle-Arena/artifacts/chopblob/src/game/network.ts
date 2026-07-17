@@ -4,7 +4,6 @@ export function buildWsUrl(lobbyCode?: string | null): string {
     const base = 'wss://chobblob-server.onrender.com/api/ws';
       return lobbyCode ? `${base}?lobby=${encodeURIComponent(lobbyCode)}` : base;
       }
-}
 
 export function buildApiUrl(path: string): string {
   const { protocol, host } = window.location;
