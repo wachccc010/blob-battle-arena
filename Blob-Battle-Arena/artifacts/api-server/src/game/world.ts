@@ -12,6 +12,8 @@ export const ATTACK_RANGE = 75; // player-to-player reach
 export const CHOP_COOLDOWN_MS = 450;
 export const TICK_MS = 50;
 export const HP_REGEN_INTERVAL_MS = 4000; // +1 HP every 4 s when out of combat
+export const MIN_PLAYERS = 1;  // game works with a single player
+export const MAX_PLAYERS = 50; // hard cap per room
 
 /** Sword tier definitions. Index = swordLevel (0 = no sword). */
 export const SWORD_TIERS = [

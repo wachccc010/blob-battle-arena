@@ -95,11 +95,11 @@ function generateGroundData(worldW: number, worldH: number): GroundData {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-interface GameCanvasProps { name: string; onExit: () => void }
+interface GameCanvasProps { name: string; lobbyCode?: string | null; onExit: () => void }
 
 let floatId = 0;
 
-export default function GameCanvas({ name, onExit }: GameCanvasProps) {
+export default function GameCanvas({ name, lobbyCode, onExit }: GameCanvasProps) {
   const canvasRef       = useRef<HTMLCanvasElement>(null);
   const socketRef       = useRef<GameSocket | null>(null);
   const meIdRef         = useRef('');
@@ -157,6 +157,8 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
   const [nearEnemy,    setNearEnemy]    = useState(false);
   const [showUpgrades, setShowUpgrades] = useState(false);
   const [killToasts,   setKillToasts]   = useState<KillToast[]>([]);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [serverError,  setServerError]  = useState<string | null>(null);
   const [isTouchDevice] = useState(
     () => typeof window !== 'undefined' &&
       (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0),
@@ -174,7 +176,7 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
 
   // WebSocket
   useEffect(() => {
-    const socket = new GameSocket();
+    const socket = new GameSocket(lobbyCode);
     socketRef.current = socket;
 
     socket.onOpen(() => { setConnected(true); socket.send({ type: 'join', name }); });
@@ -246,6 +248,8 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
             isMe: iAmKiller || iAmVictim,
           }]);
         }
+      } else if (msg.type === 'error') {
+        setServerError(msg.message);
       }
     });
 
@@ -946,17 +950,55 @@ export default function GameCanvas({ name, onExit }: GameCanvasProps) {
         </div>
       )}
 
+      {/* ── Server error overlay (e.g. room full) ── */}
+      {serverError && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.75)' }}>
+          <div className="rounded-2xl p-8 text-center shadow-2xl border border-white/10 max-w-xs"
+               style={{ background: 'rgba(20,10,10,0.92)', backdropFilter: 'blur(10px)' }}>
+            <div className="text-4xl mb-3">🚫</div>
+            <div className="text-white font-bold text-lg mb-2">Can't join</div>
+            <div className="text-white/60 text-sm mb-6">{serverError}</div>
+            <button onClick={onExit}
+              className="px-6 py-2 rounded-xl font-bold text-sm transition-colors"
+              style={{ background: 'rgba(245,158,11,0.85)', color: '#1a0a00' }}>
+              Back to Lobby
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Connecting overlay ── */}
-      {!connected && (
+      {!connected && !serverError && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.65)' }}>
           <div className="text-white text-lg animate-pulse font-semibold">Connecting…</div>
         </div>
       )}
 
-      <button onClick={onExit}
-        className="absolute bottom-3 right-4 pointer-events-auto text-white/35 hover:text-white/70 text-xs transition-colors">
-        Leave game
-      </button>
+      {/* ── Bottom-right controls ── */}
+      <div className="absolute bottom-3 right-4 flex items-center gap-3 pointer-events-auto">
+        {lobbyCode && (
+          <button
+            onClick={() => {
+              const url = `${window.location.origin}${window.location.pathname}?lobby=${lobbyCode}`;
+              (navigator.clipboard?.writeText(url) ?? Promise.resolve()).then(() => {
+                setInviteCopied(true);
+                setTimeout(() => setInviteCopied(false), 2500);
+              });
+            }}
+            className="text-xs px-3 py-1.5 rounded-full border transition-all"
+            style={{
+              background: inviteCopied ? 'rgba(74,222,128,0.18)' : 'rgba(245,158,11,0.15)',
+              borderColor: inviteCopied ? 'rgba(74,222,128,0.35)' : 'rgba(245,158,11,0.3)',
+              color: inviteCopied ? '#4ade80' : '#fbbf24',
+            }}
+          >
+            {inviteCopied ? '✓ Link copied!' : '🔗 Invite Friends'}
+          </button>
+        )}
+        <button onClick={onExit} className="text-white/35 hover:text-white/70 text-xs transition-colors">
+          Leave game
+        </button>
+      </div>
     </div>
   );
 }
