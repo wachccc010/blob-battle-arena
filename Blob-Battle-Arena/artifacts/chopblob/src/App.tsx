@@ -51,8 +51,8 @@ function Home() {
           Play
         </button>
         <p className="text-white/40 text-center text-xs mt-6">
-          Move with your mouse, WASD, or arrow keys (joystick on mobile) ·
-          Buy a sword for 1 coin · Chop trees for +1 coin
+          WASD / arrow keys to move, release to stop · Joystick on mobile ·
+          Buy a sword for 1 coin · Chop trees &amp; players for coins
         </p>
       </div>
     </div>
